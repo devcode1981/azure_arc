@@ -20,9 +20,6 @@
     "windowsAdminPassword": {
       "value": "ArcPassword123!!"
     },
-    "myIpAddress": {
-      "value": "<your IP address>"
-    },
     "logAnalyticsWorkspaceName": {
       "value": "<your unique Log Analytics workspace name>"
     },
@@ -33,7 +30,7 @@
       "value": "<SQL Managed Instance high-availability deployment (true/false)>"
     },
     "deployPostgreSQL": {
-      "value": "<PostgreSQL Hyperscale deployment (true/false)>"
+      "value": "<PostgreSQL deployment (true/false)>"
     },
     "deployBastion": {
       "value": "(true/false)"

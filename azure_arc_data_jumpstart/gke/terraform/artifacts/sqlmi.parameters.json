@@ -23,6 +23,9 @@
         "serviceType": {
             "value": "serviceType-stage"
         },
+        "readableSecondaries": {
+            "value": "readableSecondaries-stage"
+        },        
         "vCoresRequest": {
             "value": "vCoresRequest-stage"
         },
@@ -62,11 +65,11 @@
             }
         },
         "apiVersion": {
-            "value": "2021-11-01"
+            "value": "2022-03-01-preview"
         },
         "pricingTier": {
-            "value": "GeneralPurpose"
-        },        
+            "value": "pricingTier-stage"
+        },
         "licenseType": {
             "value": "LicenseIncluded"
         }

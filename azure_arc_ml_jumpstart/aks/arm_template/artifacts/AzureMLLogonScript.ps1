@@ -56,7 +56,7 @@ Write-Host "`n"
 
 $response = kubectl version --output json | ConvertFrom-Json
 $version = $response.serverVersion.gitVersion
-kubectl apply -f "https://cloud.weave.works/k8s/scope.yaml?k8s-version=$version"
+kubectl apply -f "https://github.com/weaveworks/scope/releases/download/v1.13.2/k8s-scope.yaml?k8s-version=$version"
 Do {
 	$podsPending = kubectl get pods -n weave --field-selector=status.phase!=Running -o jsonpath="{.items[*].metadata.name}"
    Start-Sleep -Seconds 5
@@ -92,6 +92,7 @@ az connectedk8s connect --name $connectedClusterName `
                         --resource-group $env:resourceGroup `
                         --location $env:azureLocation `
                         --tags 'Project=jumpstart_azure_arc_ml_services' `
+                        --correlation-id "d009f5dd-dba8-4ac7-bac9-b54ef3a6671a" `
 						      --custom-locations-oid '51dfe1e8-70c6-4de5-a08e-e18aff23d815'
                         # This is the Custom Locations Enterprise Application ObjectID from AAD
 

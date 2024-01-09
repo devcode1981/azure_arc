@@ -31,9 +31,9 @@ Write-Host "`n"
 Write-Host "Installing Azure Data Studio Extensions"
 Write-Host "`n"
 $Env:argument1="--install-extension"
-$Env:argument2="Microsoft.arc"
+$Env:argument2="microsoft.azcli"
 $Env:argument3="microsoft.azuredatastudio-postgresql"
-$Env:argument4="microsoft.azdata"
+$Env:argument4="Microsoft.arc"
 & "C:\Program Files\Azure Data Studio\bin\azuredatastudio.cmd" $Env:argument1 $Env:argument2
 & "C:\Program Files\Azure Data Studio\bin\azuredatastudio.cmd" $Env:argument1 $Env:argument3
 & "C:\Program Files\Azure Data Studio\bin\azuredatastudio.cmd" $Env:argument1 $Env:argument4
@@ -66,11 +66,6 @@ Write-Host "`n"
 az provider show --namespace Microsoft.AzureArcData -o table
 Write-Host "`n"
 
-# Making extension install dynamic
-az config set extension.use_dynamic_install=yes_without_prompt
-Write-Host "`n"
-az -v
-
 # Getting AKS cluster credentials kubeconfig file
 Write-Host "Getting AKS cluster credentials"
 Write-Host "`n"
@@ -97,7 +92,8 @@ az connectedk8s connect --name $connectedClusterName `
                         --location $Env:azureLocation `
                         --tags 'Project=jumpstart_azure_arc_data_services' `
                         --kube-config $Env:KUBECONFIG `
-                        --kube-context $Env:KUBECONTEXT
+                        --kube-context $Env:KUBECONTEXT `
+                        --correlation-id "d009f5dd-dba8-4ac7-bac9-b54ef3a6671a"
 
 Start-Sleep -Seconds 10
 
@@ -186,9 +182,15 @@ Write-Host "Azure Arc data controller is ready!"
 Write-Host "`n"
 
 # If flag set, deploy SQL MI
-if ( $Env:deploySQLMI -eq $true )
+if ( $Env:deploySQLMI -eq $true -and $Env:enableADAuth -eq $false)
 {
 & "$Env:TempDir\DeploySQLMI.ps1"
+}
+
+# if ADDS domainname is passed as parameter, deploy SQLMI with AD auth support
+if ($Env:deploySQLMI -eq $true -and $Env:enableADAuth -eq $true)
+{
+& "$Env:TempDir\DeploySQLMIADAuth.ps1"
 }
 
 # If flag set, deploy PostgreSQL

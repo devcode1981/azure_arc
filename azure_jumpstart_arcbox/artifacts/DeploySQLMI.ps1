@@ -1,10 +1,11 @@
 $Env:ArcBoxDir = "C:\ArcBox"
 $Env:ArcBoxLogsDir = "$Env:ArcBoxDir\Logs"
 
-Start-Transcript -Path $Env:ArcBoxLogsDir\deploySQL.log
+Start-Transcript -Path $Env:ArcBoxLogsDir\DeploySQL.log
 
 # Deployment environment variables
 $controllerName = "arcbox-dc" # This value needs to match the value of the data controller name as set by the ARM template deployment.
+$sqlInstanceName = "jumpstart-sql"
 
 # Deploying Azure Arc SQL Managed Instance
 Write-Host "`n"
@@ -12,12 +13,13 @@ Write-Host "Deploying Azure Arc SQL Managed Instance"
 Write-Host "`n"
 
 $dataControllerId = $(az resource show --resource-group $Env:resourceGroup --name $controllerName --resource-type "Microsoft.AzureArcData/dataControllers" --query id -o tsv)
-$customLocationId = $(az customlocation show --name "arcbox-cl" --resource-group $Env:resourceGroup --query id -o tsv)
+$customLocationId = $(az customlocation show --name "$Env:capiArcDataClusterName-cl" --resource-group $Env:resourceGroup --query id -o tsv)
 
 ################################################
 # Localize ARM template
 ################################################
 $ServiceType = "LoadBalancer"
+$readableSecondaries = $ServiceType
 
 # Resource Requests
 $vCoresRequest = "2"
@@ -27,14 +29,13 @@ $memoryLimit = "8Gi"
 
 # Storage
 $StorageClassName = "managed-premium"
-$dataStorageSize = "5"
-$logsStorageSize = "5"
-$dataLogsStorageSize = "5"
-$backupsStorageSize = "5"
+$dataStorageSize = "5Gi"
+$logsStorageSize = "5Gi"
+$dataLogsStorageSize = "5Gi"
 
 # High Availability
 $replicas = 3 # Deploy SQL MI "Business Critical" tier
-################################################
+#######################################################
 
 $SQLParams = "$Env:ArcBoxDir\SQLMI.parameters.json"
 
@@ -45,6 +46,7 @@ $SQLParams = "$Env:ArcBoxDir\SQLMI.parameters.json"
 (Get-Content -Path $SQLParams) -replace 'azdataUsername-stage',$Env:AZDATA_USERNAME | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'azdataPassword-stage',$Env:AZDATA_PASSWORD | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'serviceType-stage',$ServiceType | Set-Content -Path $SQLParams
+(Get-Content -Path $SQLParams) -replace 'readableSecondaries-stage',$readableSecondaries | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'vCoresRequest-stage',$vCoresRequest | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'memoryRequest-stage',$memoryRequest | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'vCoresLimit-stage',$vCoresLimit | Set-Content -Path $SQLParams
@@ -56,22 +58,19 @@ $SQLParams = "$Env:ArcBoxDir\SQLMI.parameters.json"
 (Get-Content -Path $SQLParams) -replace 'logsSize-stage',$logsStorageSize | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'dataLogSize-stage',$dataLogsStorageSize | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'replicasStage' ,$replicas | Set-Content -Path $SQLParams
+(Get-Content -Path $SQLParams) -replace 'sqlInstanceName-stage' ,$sqlInstanceName | Set-Content -Path $SQLParams
+(Get-Content -Path $SQLParams) -replace 'port-stage' , 11433 | Set-Content -Path $SQLParams
 
 az deployment group create --resource-group $Env:resourceGroup --template-file "$Env:ArcBoxDir\SQLMI.json" --parameters "$Env:ArcBoxDir\SQLMI.parameters.json"
 Write-Host "`n"
 
 Do {
-    Write-Host "Waiting for SQL Managed Instance. Hold tight, this might take a few minutes..."
+    Write-Host "Waiting for SQL Managed Instance. Hold tight, this might take a few minutes...(45s sleeping loop)"
     Start-Sleep -Seconds 45
     $dcStatus = $(if(kubectl get sqlmanagedinstances -n arc | Select-String "Ready" -Quiet){"Ready!"}Else{"Nope"})
     } while ($dcStatus -eq "Nope")
 Write-Host "Azure Arc SQL Managed Instance is ready!"
 Write-Host "`n"
-
-# Update Service Port from 1433 to Non-Standard
-$payload = '{\"spec\":{\"ports\":[{\"name\":\"port-mssql-tds\",\"port\":11433,\"targetPort\":1433}]}}'
-kubectl patch svc jumpstart-sql-external-svc -n arc --type merge --patch $payload
-Start-Sleep 5 # To allow the CRD to update
 
 # Downloading demo database and restoring onto SQL MI
 $podname = "jumpstart-sql-0"
@@ -84,6 +83,7 @@ kubectl exec $podname -n arc -c arc-sqlmi -- /opt/mssql-tools/bin/sqlcmd -S loca
 Write-Host ""
 Write-Host "Creating Azure Data Studio settings for SQL Managed Instance connection"
 $settingsTemplate = "$Env:ArcBoxDir\settingsTemplate.json"
+
 # Retrieving SQL MI connection endpoint
 $sqlstring = kubectl get sqlmanagedinstances jumpstart-sql -n arc -o=jsonpath='{.status.primaryEndpoint}'
 

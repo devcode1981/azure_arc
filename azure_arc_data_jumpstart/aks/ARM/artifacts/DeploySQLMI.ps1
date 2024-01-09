@@ -4,9 +4,9 @@ Start-Transcript -Path C:\Temp\DeploySQLMI.log
 $Env:TempDir = "C:\Temp"
 $controllerName = "jumpstart-dc"
 
-# Deploying Azure Arc SQL Managed Instance
+# Deploying Azure Arc-enabled SQL Managed Instance
 Write-Host "`n"
-Write-Host "Deploying Azure Arc SQL Managed Instance"
+Write-Host "Deploying Azure Arc-enabled SQL Managed Instance"
 Write-Host "`n"
 
 $customLocationId = $(az customlocation show --name "jumpstart-cl" --resource-group $env:resourceGroup --query id -o tsv)
@@ -16,6 +16,7 @@ $dataControllerId = $(az resource show --resource-group $env:resourceGroup --nam
 # Localize ARM template
 ################################################
 $ServiceType = "LoadBalancer"
+$readableSecondaries = $ServiceType
 
 # Resource Requests
 $vCoresRequest = "2"
@@ -54,6 +55,7 @@ $SQLParams = "$Env:TempDir\SQLMI.parameters.json"
 (Get-Content -Path $SQLParams) -replace 'azdataUsername-stage',$env:AZDATA_USERNAME | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'azdataPassword-stage',$env:AZDATA_PASSWORD | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'serviceType-stage',$ServiceType | Set-Content -Path $SQLParams
+(Get-Content -Path $SQLParams) -replace 'readableSecondaries-stage',$readableSecondaries | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'vCoresRequest-stage',$vCoresRequest | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'memoryRequest-stage',$memoryRequest | Set-Content -Path $SQLParams
 (Get-Content -Path $SQLParams) -replace 'vCoresLimit-stage',$vCoresLimit | Set-Content -Path $SQLParams
@@ -79,7 +81,7 @@ Do {
     } while ($dcStatus -eq "Nope")
 
 Write-Host "`n"
-Write-Host "Azure Arc SQL Managed Instance is ready!"
+Write-Host "Azure Arc-enabled SQL Managed Instance is ready!"
 Write-Host "`n"
 
 # Update Service Port from 1433 to Non-Standard
@@ -106,16 +108,40 @@ kubectl exec $podname -n arc -c arc-sqlmi -- /opt/mssql-tools/bin/sqlcmd -S loca
 # Creating Azure Data Studio settings for SQL Managed Instance connection
 Write-Host "`n"
 Write-Host "Creating Azure Data Studio settings for SQL Managed Instance connection"
-$settingsTemplate = "$Env:TempDir\settingsTemplate.json"
 
 # Retrieving SQL MI connection endpoint
 $sqlstring = kubectl get sqlmanagedinstances jumpstart-sql -n arc -o=jsonpath='{.status.endpoints.primary}'
 
-# Replace placeholder values in settingsTemplate.json
-(Get-Content -Path $settingsTemplate) -replace 'arc_sql_mi',$sqlstring | Set-Content -Path $settingsTemplate
-(Get-Content -Path $settingsTemplate) -replace 'sa_username',$env:AZDATA_USERNAME | Set-Content -Path $settingsTemplate
-(Get-Content -Path $settingsTemplate) -replace 'sa_password',$env:AZDATA_PASSWORD | Set-Content -Path $settingsTemplate
-(Get-Content -Path $settingsTemplate) -replace 'false','true' | Set-Content -Path $settingsTemplate
+# Create database connection in Azure Data Studio
+$settingsTemplateFile = "$Env:TempDir\settingsTemplate.json"
+
+$templateContent = @"
+{
+    "options": {
+      "connectionName": "ArcSQLMI",
+      "server": "$sqlstring",
+      "database": "",
+      "authenticationType": "SqlLogin",
+      "user": "$env:AZDATA_USERNAME",
+      "password": "$env:AZDATA_PASSWORD",
+      "applicationName": "azdata",
+      "groupId": "C777F06B-202E-4480-B475-FA416154D458",
+      "databaseDisplayName": ""
+    },
+    "groupId": "C777F06B-202E-4480-B475-FA416154D458",
+    "providerName": "MSSQL",
+    "savePassword": true,
+    "id": "ac333479-a04b-436b-88ab-3b314a201295"
+}
+"@
+
+Write-Host "Creating Azure Data Studio connections settings template file $settingsTemplateJson"
+
+$settingsTemplateJson = Get-Content $settingsTemplateFile | ConvertFrom-Json
+$settingsTemplateJson.'datasource.connections' += ConvertFrom-Json -InputObject $templateContent
+ConvertTo-Json -InputObject $settingsTemplateJson -Depth 3 | Set-Content -Path $settingsTemplateFile
+
+Write-Host "Created Azure Data Studio connections settings template file."
 
 # Unzip SqlQueryStress
 Expand-Archive -Path $Env:TempDir\SqlQueryStress.zip -DestinationPath $Env:TempDir\SqlQueryStress
@@ -133,13 +159,3 @@ $Shortcut.Save()
 
 # Creating SQLMI Endpoints data
 & "$Env:TempDir\SQLMIEndpoints.ps1"
-
-# If PostgreSQL isn't being deployed, clean up settings file
-if ( $env:deployPostgreSQL -eq $false )
-{
-    $string = Get-Content $settingsTemplate
-    $string[25] = $string[25] -replace ",",""
-    $string | Set-Content $settingsTemplate
-    $string = Get-Content $settingsTemplate | Select-Object -First 25 -Last 4
-    $string | Set-Content -Path $settingsTemplate
-}

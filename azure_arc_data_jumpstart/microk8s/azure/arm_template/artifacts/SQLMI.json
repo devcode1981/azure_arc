@@ -34,6 +34,9 @@
     "serviceType": {
       "type": "String"
     },
+    "readableSecondaries": {
+      "type": "String"
+    },    
     "vCoresRequest": {
       "type": "String"
     },
@@ -112,7 +115,11 @@
             "dev": true,
             "services": {
               "primary": {
-                "type": "[parameters('serviceType')]"
+                "type": "[parameters('serviceType')]",
+                "port": "31111"
+              },
+              "readableSecondaries": {
+                "type": "[parameters('readableSecondaries')]"
               }
             },
             "replicas": "[parameters('replicas')]",
